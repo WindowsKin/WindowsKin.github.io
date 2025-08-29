@@ -115,7 +115,7 @@
             <!-- 进度和结果 -->
             <div id="progressArea" class="hidden mb-8">
                 <div class="bg-gray-200 rounded-full h-2.5 mb-2">
-                    <div id="progressBar" class="bg-primary h-2.5 rounded-full" style="width: 0%"></div>
+                    <div id="progressBar" class="bg-primary h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
                 <p id="progressText" class="text-gray-600 text-center">准备中...</p>
             </div>
@@ -213,13 +213,19 @@
         });
 
         // 点击上传区域触发文件选择
-        fileDropArea.addEventListener('click', function() {
-            fileInput.click();
+        fileDropArea.addEventListener('click', function(e) {
+            // 只有点击区域不是按钮时才触发文件选择
+            if (!e.target.closest('label') && !e.target.closest('button')) {
+                fileInput.click();
+            }
         });
 
         // 处理选中的文件
         function handleFile(file) {
+            if (!file) return;
+            
             selectedFile = file;
+            // 确保文件名显示正确
             fileName.textContent = `已选择: ${file.name} (${formatFileSize(file.size)})`;
             fileName.classList.remove('hidden');
             processBtn.disabled = false;
@@ -293,11 +299,36 @@
 
                     // 损坏数据：从文件头之后开始，每隔damageInterval字节，损坏2字节
                     let modifiedCount = 0;
+                    const totalSteps = Math.ceil(dataSize / damageInterval);
+                    let currentStep = 0;
                     
-                    for (let i = actualHeaderLength; i < fileSize; i += damageInterval) {
-                        // 更新进度
-                        const progress = 20 + Math.floor((i / fileSize) * 70);
-                        updateProgress(progress, `正在损坏数据... (${modifiedCount}处)`);
+                    // 使用requestAnimationFrame优化大文件进度显示
+                    function processNextChunk() {
+                        // 计算当前批次处理的位置
+                        const i = actualHeaderLength + currentStep * damageInterval;
+                        
+                        if (i >= fileSize) {
+                            // 处理完成
+                            updateProgress(100, '处理完成！');
+                            
+                            // 创建处理后的文件
+                            processedBlob = new Blob([byteArray], { type: selectedFile.type });
+                            const nameParts = selectedFile.name.split('.');
+                            if (nameParts.length > 1) {
+                                const ext = nameParts.pop();
+                                processedFileName = `${nameParts.join('.')}_damaged.${ext}`;
+                            } else {
+                                processedFileName = `${selectedFile.name}_damaged`;
+                            }
+
+                            // 显示结果
+                            resultInfo.textContent = `已在文件中损坏 ${modifiedCount/2} 处，共 ${modifiedCount} 字节`;
+                            setTimeout(() => {
+                                progressArea.classList.add('hidden');
+                                resultArea.classList.remove('hidden');
+                            }, 500);
+                            return;
+                        }
                         
                         // 损坏接下来的2字节，确保不超出文件范围
                         for (let j = 0; j < 2 && i + j < fileSize; j++) {
@@ -305,35 +336,28 @@
                             byteArray[i + j] = Math.floor(Math.random() * 256);
                             modifiedCount++;
                         }
+                        
+                        // 更新进度
+                        currentStep++;
+                        const progress = 20 + Math.floor((currentStep / totalSteps) * 70);
+                        updateProgress(progress, `正在损坏数据... (${Math.floor(currentStep/totalSteps*100)}%)`);
+                        
+                        // 继续处理下一批
+                        requestAnimationFrame(processNextChunk);
                     }
-
-                    // 完成处理
-                    updateProgress(100, '处理完成！');
                     
-                    // 创建处理后的文件
-                    processedBlob = new Blob([byteArray], { type: selectedFile.type });
-                    const nameParts = selectedFile.name.split('.');
-                    if (nameParts.length > 1) {
-                        const ext = nameParts.pop();
-                        processedFileName = `${nameParts.join('.')}_damaged.${ext}`;
-                    } else {
-                        processedFileName = `${selectedFile.name}_damaged`;
-                    }
-
-                    // 显示结果
-                    resultInfo.textContent = `已在文件中损坏 ${modifiedCount/2} 处，共 ${modifiedCount} 字节`;
-                    setTimeout(() => {
-                        progressArea.classList.add('hidden');
-                        resultArea.classList.remove('hidden');
-                    }, 500);
+                    // 开始分块处理
+                    processNextChunk();
 
                 } catch (error) {
+                    console.error('处理错误:', error);
                     showError(`处理文件时出错: ${error.message}`);
                 }
             };
 
             reader.onerror = function() {
-                showError('读取文件时出错');
+                console.error('读取错误:', reader.error);
+                showError('读取文件时出错: ' + reader.error.message);
             };
 
             // 读取文件为ArrayBuffer
@@ -356,14 +380,29 @@
         // 下载处理后的文件
         downloadBtn.addEventListener('click', function() {
             if (processedBlob && processedFileName) {
-                const url = URL.createObjectURL(processedBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = processedFileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                try {
+                    const url = URL.createObjectURL(processedBlob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = processedFileName;
+                    document.body.appendChild(a);
+                    // 模拟点击下载
+                    const clickEvent = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    a.dispatchEvent(clickEvent);
+                    
+                    // 清理
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                } catch (error) {
+                    console.error('下载错误:', error);
+                    showError('下载文件时出错: ' + error.message);
+                }
             }
         });
     </script>
