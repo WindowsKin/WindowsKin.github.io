@@ -1,410 +1,495 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>二进制文件损坏工具</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#3B82F6',
-                        secondary: '#10B981',
-                        danger: '#EF4444',
-                        dark: '#1F2937',
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                }
-            }
+    <meta name="viewport" content="user-scalable=no">
+    <style>
+        body {
+            background: #131115;
         }
-    </script>
-    <style type="text/tailwindcss">
-        @layer utilities {
-            .content-auto {
-                content-visibility: auto;
-            }
-            .file-drop-area {
-                @apply border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-all duration-300;
-            }
-            .file-drop-area.active {
-                @apply border-primary bg-blue-50;
-            }
-            .btn-primary {
-                @apply bg-primary hover:bg-primary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50;
-            }
-            .btn-secondary {
-                @apply bg-secondary hover:bg-secondary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-secondary/50;
-            }
-            .input-field {
-                @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200;
-            }
+        #c1 {
+            background: #fbf7fe;
+        }
+        #btn {
+            position: fixed;
+            left: 0px;
+            top: 0px;
+        }
+        #c1 {
+            position: fixed;
+            left: 0px;
+            top: 0px;
+        }
+        #main {
+            transform-origin: 0px 0px;
+            position: fixed;
+            left: 0px;
+            top: 0px;
+        }
+        #config {
+            position: fixed;
+            left: 0px;
+            top: 30px;
+            display: none;
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen font-sans">
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
-        <header class="mb-8 text-center">
-            <h1 class="text-[clamp(1.8rem,4vw,2.5rem)] font-bold text-dark mb-2">
-                <<i class="fa fa-code-fork text-primary mr-2"></</i>二进制文件损坏工具
-            </h1>
-            <p class="text-gray-600 text-lg">在不修改文件头的情况下，每隔指定字节损坏2字节数据</p>
-        </header>
-
-        <main class="bg-white rounded-xl shadow-md p-6 md:p-8 mb-8">
-            <!-- 文件上传区域 -->
-            <div id="fileDropArea" class="file-drop-area mb-8">
-                <<i class="fa fa-cloud-upload text-5xl text-gray-400 mb-4"></</i>
-                <p class="text-gray-600 mb-2">拖放文件到这里，或</p>
-                <label class="btn-primary inline-block cursor-pointer">
-                    <<i class="fa fa-file-o mr-1"></</i> 选择文件
-                    <input type="file" id="fileInput" class="hidden" accept="*">
-                </label>
-                <p id="fileName" class="mt-4 text-gray-500 text-sm hidden"></p>
-            </div>
-
-            <!-- 参数设置 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div>
-                    <label for="headerLength" class="block text-gray-700 font-medium mb-2">
-                        文件头长度 (字节)
-                    </label>
-                    <div class="flex items-center">
-                        <input 
-                            type="number" 
-                            id="headerLength" 
-                            class="input-field" 
-                            value="512" 
-                            min="0"
-                            placeholder="不修改的文件头长度"
-                        >
-                        <span class="ml-2 text-gray-500">字节</span>
-                    </div>
-                    <p class="text-gray-500 text-sm mt-1">文件开头的这些字节将保持不变</p>
-                </div>
-                <div>
-                    <label for="damageInterval" class="block text-gray-700 font-medium mb-2">
-                        损坏间隔 (字节)
-                    </label>
-                    <div class="flex items-center">
-                        <input 
-                            type="number" 
-                            id="damageInterval" 
-                            class="input-field" 
-                            value="1024" 
-                            min="2"
-                            placeholder="每隔多少字节损坏一次"
-                        >
-                        <span class="ml-2 text-gray-500">字节</span>
-                    </div>
-                    <p class="text-gray-500 text-sm mt-1">每隔指定字节，损坏接下来的2字节</p>
-                </div>
-            </div>
-
-            <!-- 处理按钮 -->
-            <div class="text-center mb-8">
-                <button id="processBtn" class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                    <<i class="fa fa-wrench mr-2"></</i>开始损坏文件
-                </button>
-            </div>
-
-            <!-- 进度和结果 -->
-            <div id="progressArea" class="hidden mb-8">
-                <div class="bg-gray-200 rounded-full h-2.5 mb-2">
-                    <div id="progressBar" class="bg-primary h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-                </div>
-                <p id="progressText" class="text-gray-600 text-center">准备中...</p>
-            </div>
-
-            <div id="resultArea" class="hidden mb-8 text-center">
-                <div class="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
-                    <<i class="fa fa-check-circle text-secondary text-2xl mb-2"></</i>
-                    <h3 class="text-lg font-medium text-gray-800">文件处理完成！</h3>
-                    <p id="resultInfo" class="text-gray-600 mt-1"></p>
-                </div>
-                <button id="downloadBtn" class="btn-secondary">
-                    <<i class="fa fa-download mr-2"></</i>下载损坏后的文件
-                </button>
-            </div>
-
-            <!-- 错误提示 -->
-            <div id="errorArea" class="hidden mb-8">
-                <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <<i class="fa fa-exclamation-circle text-danger text-xl mb-2"></</i>
-                    <p id="errorMessage" class="text-gray-700"></p>
-                </div>
-            </div>
-        </main>
-
-        <footer class="text-center text-gray-500 text-sm">
-            <p>二进制文件损坏工具 &copy; 2023 | 在浏览器中本地处理，不会上传您的文件</p>
-        </footer>
+<body style="overflow-x:hidden;overflow-y:hidden">
+<div id="main">
+    <canvas id="c1" width="1024" height="1024">
+        <span>不支持canvas浏览器</span>
+    </canvas>
+</div>
+    <button id="btn">CONFIG</button>
+    <div id="config">
+        <textarea name="" id="kernel" cols="30" rows="10"></textarea>
+        <br />
+        <button id="apply">APPLY</button>
+        <button id="cancle">CANCLE</button>
     </div>
-
     <script>
-        // 获取DOM元素
-        const fileDropArea = document.getElementById('fileDropArea');
-        const fileInput = document.getElementById('fileInput');
-        const fileName = document.getElementById('fileName');
-        const headerLengthInput = document.getElementById('headerLength');
-        const damageIntervalInput = document.getElementById('damageInterval');
-        const processBtn = document.getElementById('processBtn');
-        const progressArea = document.getElementById('progressArea');
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
-        const resultArea = document.getElementById('resultArea');
-        const resultInfo = document.getElementById('resultInfo');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const errorArea = document.getElementById('errorArea');
-        const errorMessage = document.getElementById('errorMessage');
+alert("你的手机死机了嘛？-by bilibili@WindowsKin");
+    var cx, cy;
+    var glposition;
+    var glright;
+    var glforward;
+    var glup;
+    var glorigin;
+    var glx;
+    var gly;
+    var gllen;
+    var canvas;
+    var gl;
+    var date = new Date();
+    var md = 0,mx,my;
+    var t2,t1 = date.getTime();
+    var mx = 0, my = 0, mx1 = 0, my1 = 0, lasttimen = 0;
+    var ml = 0, mr = 0, mm = 0;
+    var len = 1.6;
+    var ang1 = 2.8;
+    var ang2 = 0.4;
+    var cenx = 0.0;
+    var ceny = 0.0;
+    var cenz = 0.0;
+        var KERNEL = "float kernal(vec3 ver){\n" +
+            "   vec3 a;\n" +
+            "float b,c,d,e;\n" +
+            "   a=ver;\n" +
+            "   for(int i=0;i<5;i++){\n" +
+            "       b=length(a);\n" +
+            "       c=atan(a.y,a.x)*8.0;\n" +
+            "       e=1.0/b;\n" +
+            "       d=acos(a.z/b)*8.0;\n" +
+            "       b=pow(b,8.0);\n" +
+            "       a=vec3(b*sin(d)*cos(c),b*sin(d)*sin(c),b*cos(d))+ver;\n" +
+            "       if(b>6.0){\n" +
+            "           break;\n" +
+            "       }\n" +
+            "   }" +
+            "   return 4.0-a.x*a.x-a.y*a.y-a.z*a.z;" +
+            "}";
+    var vertshade;
+    var fragshader;
+    var shaderProgram;
+    function ontimer() {
+        ang1+=0.01;
+        draw();
+        window.requestAnimationFrame(ontimer);
+    }
+    document.addEventListener("mousedown",
+        function (ev) {
+            var oEvent = ev || event;
+            if (oEvent.button == 0) {
+                ml = 1;
+                mm = 0;
+            }
+            if (oEvent.button == 2) {
+                mr = 1;
+                mm = 0;
+            }
+            mx = oEvent.clientX;
+            my = oEvent.clientY;
+        },
+        false);
+    document.addEventListener("mouseup",
+        function (ev) {
+            var oEvent = ev || event;
+            if (oEvent.button == 0) {
+                ml = 0;
+            }
+            if (oEvent.button == 2) {
+                mr = 0;
+            }
+        },
+        false);
+    document.addEventListener("mousemove",
+        function (ev) {
+        var oEvent = ev || event;
+        if (ml == 1) {
+            ang1 += (oEvent.clientX - mx) * 0.002;
+            ang2 += (oEvent.clientY - my) * 0.002;
+            if (oEvent.clientX != mx || oEvent.clientY != my) {
+                mm = 1;
+            }
+        }
+        if (mr == 1) {
+            var l = len * 4.0 / (cx + cy);
+            cenx += l * (-(oEvent.clientX - mx) * Math.sin(ang1) - (oEvent.clientY - my) * Math.sin(ang2) * Math.cos(ang1));
+            ceny += l * ((oEvent.clientY - my) * Math.cos(ang2));
+            cenz += l * ((oEvent.clientX - mx) * Math.cos(ang1) - (oEvent.clientY - my) * Math.sin(ang2) * Math.sin(ang1));
+            if (oEvent.clientX != mx || oEvent.clientY != my) {
+                mm = 1;
+            }
+        }
+        mx = oEvent.clientX;
+        my = oEvent.clientY;
+        },
+        false);
+    document.addEventListener("mousewheel",
+        function (ev) {
+            ev.preventDefault();
+            var oEvent = ev || event;
+            len *= Math.exp(-0.001 * oEvent.wheelDelta);
+        },
+        false);
+    document.addEventListener("touchstart",
+        function (ev) {
+            var n = ev.touches.length;
+            if (n == 1) {
+                var oEvent = ev.touches[0];
+                mx = oEvent.clientX;
+                my = oEvent.clientY;
+            }
+            else if (n == 2) {
+                var oEvent = ev.touches[0];
+                mx = oEvent.clientX;
+                my = oEvent.clientY;
+                oEvent = ev.touches[1];
+                mx1 = oEvent.clientX;
+                my1 = oEvent.clientY;
+            }
+            lasttimen = n;
+        },
+        false);
+    document.addEventListener("touchend",
+        function (ev) {
+            var n = ev.touches.length;
+            if (n == 1) {
+                var oEvent = ev.touches[0];
+                mx = oEvent.clientX;
+                my = oEvent.clientY;
+            }
+            else if (n == 2) {
+                var oEvent = ev.touches[0];
+                mx = oEvent.clientX;
+                my = oEvent.clientY;
+                oEvent = ev.touches[1];
+                mx1 = oEvent.clientX;
+                my1 = oEvent.clientY;
+            }
+            lasttimen = n;
+        },
+        false);
+    document.addEventListener("touchmove",
+        function (ev) {
+            ev.preventDefault();
+            var n = ev.touches.length;
+            if (n == 1&&lasttimen==1) {
+                var oEvent = ev.touches[0];
+                ang1 += (oEvent.clientX - mx) * 0.002;
+                ang2 += (oEvent.clientY - my) * 0.002;
+                mx = oEvent.clientX;
+                my = oEvent.clientY;
+            }
+            else if (n == 2) {
+                var oEvent = ev.touches[0];
+                var oEvent1 = ev.touches[1];
+                var l = len * 2.0 / (cx + cy), l1;
+                cenx += l * (-(oEvent.clientX + oEvent1.clientX - mx - mx1) * Math.sin(ang1) - (oEvent.clientY + oEvent1.clientY - my - my1) * Math.sin(ang2) * Math.cos(ang1));
+                ceny += l * ((oEvent.clientY + oEvent1.clientY - my - my1) * Math.cos(ang2));
+                cenz += l * ((oEvent.clientX + oEvent1.clientX - mx - mx1) * Math.cos(ang1) - (oEvent.clientY + oEvent1.clientY - my - my1) * Math.sin(ang2) * Math.sin(ang1));
+                l1 = Math.sqrt((mx - mx1) * (mx - mx1) + (my - my1) * (my - my1)+1.0);
+                mx = oEvent.clientX;
+                my = oEvent.clientY;
+                mx1 = oEvent1.clientX;
+                my1 = oEvent1.clientY;
+                l = Math.sqrt((mx - mx1) * (mx - mx1) + (my - my1) * (my - my1) + 1.0);
+                len *= l1 / l;
+            }
+            lasttimen = n;
+        },
+        false);
+    document.oncontextmenu = function (event) {
+        if (mm == 1) {
+            event.preventDefault();
+        }
+    };
+    function draw() {
+        date = new Date();
+        var t2 = date.getTime();
+        //ang1 += (t2 - t1)*0.001;
+        t1 = t2;
+        //ang1 += 0.1;
+        gl.uniform1f(glx, cx * 2.0 / (cx + cy));
+        gl.uniform1f(gly, cy * 2.0 / (cx + cy));
+        gl.uniform1f(gllen, len);
+        gl.uniform3f(glorigin, len * Math.cos(ang1) * Math.cos(ang2) + cenx, len * Math.sin(ang2) + ceny, len * Math.sin(ang1) * Math.cos(ang2) + cenz);
+        gl.uniform3f(glright, Math.sin(ang1), 0, -Math.cos(ang1));
+        gl.uniform3f(glup, -Math.sin(ang2) * Math.cos(ang1), Math.cos(ang2), -Math.sin(ang2) * Math.sin(ang1));
+        gl.uniform3f(glforward, -Math.cos(ang1) * Math.cos(ang2), -Math.sin(ang2), -Math.sin(ang1) * Math.cos(ang2));
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.finish();
+    }
+    window.onresize = function () {
+        cx = document.body.clientWidth;
+        cy = document.body.clientHeight;
+        if(cx>cy){
+            cx=cy;
+        }
+        else{
+            cy=cx;
+        }
+        document.getElementById("main").style.width=1024+"px";
+        document.getElementById("main").style.height=1024+"px";
+        document.getElementById("main").style.transform="scale("+cx/1024+","+cy/1024+")";
+    }
+    window.onload = function () {
+        cx = document.body.clientWidth;
+        cy = document.body.clientHeight;
+        if(cx>cy){
+            cx=cy;
+        }
+        else{
+            cy=cx;
+        }
+        document.getElementById("main").style.width=1024+"px";
+        document.getElementById("main").style.height=1024+"px";
+        document.getElementById("main").style.transform="scale("+cx/1024+","+cy/1024+")";
+        var positions = [-1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0];
+        var VSHADER_SOURCE =
+            "#version 100 \n"+
+            "precision highp float;\n" +
+            "attribute vec4 position;" +
+            "varying vec3 dir, localdir;" +
+            "uniform vec3 right, forward, up, origin;" +
+            "uniform float x,y;" +
+            "void main() {" +
+            "   gl_Position = position; " +
+            "   dir = forward + right * position.x*x + up * position.y*y;" +
+            "   localdir.x = position.x*x;" +
+            "   localdir.y = position.y*y;" +
+            "   localdir.z = -1.0;" +
+            "} ";
+        var FSHADER_SOURCE =
+            "#version 100 \n" +
+            "#define PI 3.14159265358979324\n" +
+            "#define M_L 0.3819660113\n" +
+            "#define M_R 0.6180339887\n" +
+            "#define MAXR 8\n" +
+            "#define SOLVER 8\n" +
+            "precision highp float;\n" +
+            "float kernal(vec3 ver)\n;" +
+            "uniform vec3 right, forward, up, origin;\n" +
+            "varying vec3 dir, localdir;\n" +
+            "uniform float len;\n" +
+            "vec3 ver;\n" +
+            "int sign;"+
+            "float v, v1, v2;\n" +
+            "float r1, r2, r3, r4, m1, m2, m3, m4;\n" +
+            "vec3 n, reflect;\n" +
+            "const float step = 0.002;\n" +
+            "vec3 color;\n" +
+            "void main() {\n" +
+            "   color.r=0.0;\n" +
+            "   color.g=0.0;\n" +
+            "   color.b=0.0;\n" +
+            "   sign=0;"+
+            "   v1 = kernal(origin + dir * (step*len));\n" +
+            "   v2 = kernal(origin);\n" +
+            "   for (int k = 2; k < 1002; k++) {\n" +
+            "      ver = origin + dir * (step*len*float(k));\n" +
+            "      v = kernal(ver);\n" +
+            "      if (v > 0.0 && v1 < 0.0) {\n" +
+            "         r1 = step * len*float(k - 1);\n" +
+            "         r2 = step * len*float(k);\n" +
+            "         m1 = kernal(origin + dir * r1);\n" +
+            "         m2 = kernal(origin + dir * r2);\n" +
+            "         for (int l = 0; l < SOLVER; l++) {\n" +
+            "            r3 = r1 * 0.5 + r2 * 0.5;\n" +
+            "            m3 = kernal(origin + dir * r3);\n" +
+            "            if (m3 > 0.0) {\n" +
+            "               r2 = r3;\n" +
+            "               m2 = m3;\n" +
+            "            }\n" +
+            "            else {\n" +
+            "               r1 = r3;\n" +
+            "               m1 = m3;\n" +
+            "            }\n" +
+            "         }\n" +
+            "         if (r3 < 2.0 * len) {\n" +
+            "               sign=1;" +
+            "            break;\n" +
+            "         }\n" +
+            "      }\n" +
+            "      if (v < v1&&v1>v2&&v1 < 0.0 && (v1*2.0 > v || v1 * 2.0 > v2)) {\n" +
+            "         r1 = step * len*float(k - 2);\n" +
+            "         r2 = step * len*(float(k) - 2.0 + 2.0*M_L);\n" +
+            "         r3 = step * len*(float(k) - 2.0 + 2.0*M_R);\n" +
+            "         r4 = step * len*float(k);\n" +
+            "         m2 = kernal(origin + dir * r2);\n" +
+            "         m3 = kernal(origin + dir * r3);\n" +
+            "         for (int l = 0; l < MAXR; l++) {\n" +
+            "            if (m2 > m3) {\n" +
+            "               r4 = r3;\n" +
+            "               r3 = r2;\n" +
+            "               r2 = r4 * M_L + r1 * M_R;\n" +
+            "               m3 = m2;\n" +
+            "               m2 = kernal(origin + dir * r2);\n" +
+            "            }\n" +
+            "            else {\n" +
+            "               r1 = r2;\n" +
+            "               r2 = r3;\n" +
+            "               r3 = r4 * M_R + r1 * M_L;\n" +
+            "               m2 = m3;\n" +
+            "               m3 = kernal(origin + dir * r3);\n" +
+            "            }\n" +
+            "         }\n" +
+            "         if (m2 > 0.0) {\n" +
+            "            r1 = step * len*float(k - 2);\n" +
+            "            r2 = r2;\n" +
+            "            m1 = kernal(origin + dir * r1);\n" +
+            "            m2 = kernal(origin + dir * r2);\n" +
+            "            for (int l = 0; l < SOLVER; l++) {\n" +
+            "               r3 = r1 * 0.5 + r2 * 0.5;\n" +
+            "               m3 = kernal(origin + dir * r3);\n" +
+            "               if (m3 > 0.0) {\n" +
+            "                  r2 = r3;\n" +
+            "                  m2 = m3;\n" +
+            "               }\n" +
+            "               else {\n" +
+            "                  r1 = r3;\n" +
+            "                  m1 = m3;\n" +
+            "               }\n" +
+            "            }\n" +
+            "            if (r3 < 2.0 * len&&r3> step*len) {\n" +
+            "                   sign=1;" +
+            "               break;\n" +
+            "            }\n" +
+            "         }\n" +
+            "         else if (m3 > 0.0) {\n" +
+            "            r1 = step * len*float(k - 2);\n" +
+            "            r2 = r3;\n" +
+            "            m1 = kernal(origin + dir * r1);\n" +
+            "            m2 = kernal(origin + dir * r2);\n" +
+            "            for (int l = 0; l < SOLVER; l++) {\n" +
+            "               r3 = r1 * 0.5 + r2 * 0.5;\n" +
+            "               m3 = kernal(origin + dir * r3);\n" +
+            "               if (m3 > 0.0) {\n" +
+            "                  r2 = r3;\n" +
+            "                  m2 = m3;\n" +
+            "               }\n" +
+            "               else {\n" +
+            "                  r1 = r3;\n" +
+            "                  m1 = m3;\n" +
+            "               }\n" +
+            "            }\n" +
+            "            if (r3 < 2.0 * len&&r3> step*len) {\n" +
+            "                   sign=1;" +
+            "               break;\n" +
+            "            }\n" +
+            "         }\n" +
+            "      }\n" +
+            "      v2 = v1;\n" +
+            "      v1 = v;\n" +
+            "   }\n" +
+            "   if (sign==1) {\n" +
+            "      ver = origin + dir*r3 ;\n" +
+                "       r1=ver.x*ver.x+ver.y*ver.y+ver.z*ver.z;" +
+            "      n.x = kernal(ver - right * (r3*0.00025)) - kernal(ver + right * (r3*0.00025));\n" +
+            "      n.y = kernal(ver - up * (r3*0.00025)) - kernal(ver + up * (r3*0.00025));\n" +
+            "      n.z = kernal(ver + forward * (r3*0.00025)) - kernal(ver - forward * (r3*0.00025));\n" +
+            "      r3 = n.x*n.x+n.y*n.y+n.z*n.z;\n" +
+            "      n = n * (1.0 / sqrt(r3));\n" +
+            "      ver = localdir;\n" +
+            "      r3 = ver.x*ver.x+ver.y*ver.y+ver.z*ver.z;\n" +
+            "      ver = ver * (1.0 / sqrt(r3));\n" +
+            "      reflect = n * (-2.0*dot(ver, n)) + ver;\n" +
+            "      r3 = reflect.x*0.276+reflect.y*0.920+reflect.z*0.276;\n" +
+            "      r4 = n.x*0.276+n.y*0.920+n.z*0.276;\n" +
+            "      r3 = max(0.0,r3);\n" +
+            "      r3 = r3 * r3*r3*r3;\n" +
+            "      r3 = r3 * 0.45 + r4 * 0.25 + 0.3;\n" +
+                "      n.x = sin(r1*10.0)*0.5+0.5;\n" +
+                "      n.y = sin(r1*10.0+2.05)*0.5+0.5;\n" +
+                "      n.z = sin(r1*10.0-2.05)*0.5+0.5;\n" +
+            "      color = n*r3;\n" +
+            "   }\n" +
+            "   gl_FragColor = vec4(color.x, color.y, color.z, 1.0);" +
+            "}";
+        canvas = document.getElementById('c1');
+        gl = canvas.getContext('webgl');
+        vertshader = gl.createShader(gl.VERTEX_SHADER);
+        fragshader = gl.createShader(gl.FRAGMENT_SHADER);
+        shaderProgram = gl.createProgram();
+        gl.shaderSource(vertshader, VSHADER_SOURCE);
+        gl.compileShader(vertshader);
+        var infov = gl.getShaderInfoLog(vertshader);
+        gl.shaderSource(fragshader, FSHADER_SOURCE + KERNEL);
+        gl.compileShader(fragshader);
+        var infof = gl.getShaderInfoLog(fragshader);
+        gl.attachShader(shaderProgram, vertshader);
+        gl.attachShader(shaderProgram, fragshader);
+        gl.linkProgram(shaderProgram);
+        gl.useProgram(shaderProgram);
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            var info = gl.getProgramInfoLog(shaderProgram);
+            throw 'Could not compile WebGL program. \n\n' + infov + infof + info;
+        }
+        glposition = gl.getAttribLocation(shaderProgram, 'position');
+        glright = gl.getUniformLocation(shaderProgram, 'right');
+        glforward = gl.getUniformLocation(shaderProgram, 'forward');
+        glup = gl.getUniformLocation(shaderProgram, 'up');
+        glorigin = gl.getUniformLocation(shaderProgram, 'origin');
+        glx = gl.getUniformLocation(shaderProgram, 'x');
+        gly = gl.getUniformLocation(shaderProgram, 'y');
+        gllen = gl.getUniformLocation(shaderProgram, 'len');
+        var buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+        gl.vertexAttribPointer(glposition, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(glposition);
 
-        // 存储选中的文件
-        let selectedFile = null;
-        let processedBlob = null;
-        let processedFileName = '';
-
-        // 监听文件拖放事件
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            fileDropArea.addEventListener(eventName, preventDefaults, false);
+        gl.viewport(0, 0, 1024, 1024);
+        draw();
+        window.requestAnimationFrame(ontimer);
+        document.getElementById("kernel").value = KERNEL;
+        document.getElementById("btn").addEventListener("click", function() {
+            var state = this.innerText == "CONFIG";
+            this.innerText = state ? "HIDE" : "CONFIG";
+            document.getElementById("config").style.display = state ? "inline" : "none";
         });
-
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            fileDropArea.addEventListener(eventName, highlight, false);
+        document.getElementById("apply").addEventListener("click", function() {
+            KERNEL = document.getElementById("kernel").value;
+            gl.shaderSource(fragshader, FSHADER_SOURCE + KERNEL);
+            gl.compileShader(fragshader);
+            var infof = gl.getShaderInfoLog(fragshader);
+            gl.linkProgram(shaderProgram);
+            gl.useProgram(shaderProgram);
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                var info = gl.getProgramInfoLog(shaderProgram);
+                alert(infof + info);
+            }
+            glposition = gl.getAttribLocation(shaderProgram, 'position');
+            glright = gl.getUniformLocation(shaderProgram, 'right');
+            glforward = gl.getUniformLocation(shaderProgram, 'forward');
+            glup = gl.getUniformLocation(shaderProgram, 'up');
+            glorigin = gl.getUniformLocation(shaderProgram, 'origin');
+            glx = gl.getUniformLocation(shaderProgram, 'x');
+            gly = gl.getUniformLocation(shaderProgram, 'y');
+            gllen = gl.getUniformLocation(shaderProgram, 'len');
         });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            fileDropArea.addEventListener(eventName, unhighlight, false);
+        document.getElementById("cancle").addEventListener("click", function() {
+            document.getElementById("kernel").value = KERNEL;
         });
-
-        function highlight() {
-            fileDropArea.classList.add('active');
-        }
-
-        function unhighlight() {
-            fileDropArea.classList.remove('active');
-        }
-
-        // 处理文件拖放
-        fileDropArea.addEventListener('drop', handleDrop, false);
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const file = dt.files[0];
-            
-            if (file) {
-                handleFile(file);
-            }
-        }
-
-        // 处理文件选择
-        fileInput.addEventListener('change', function() {
-            if (this.files.length > 0) {
-                handleFile(this.files[0]);
-            }
-        });
-
-        // 点击上传区域触发文件选择
-        fileDropArea.addEventListener('click', function(e) {
-            // 只有点击区域不是按钮时才触发文件选择
-            if (!e.target.closest('label') && !e.target.closest('button')) {
-                fileInput.click();
-            }
-        });
-
-        // 处理选中的文件
-        function handleFile(file) {
-            if (!file) return;
-            
-            selectedFile = file;
-            // 确保文件名显示正确
-            fileName.textContent = `已选择: ${file.name} (${formatFileSize(file.size)})`;
-            fileName.classList.remove('hidden');
-            processBtn.disabled = false;
-            
-            // 重置状态
-            resultArea.classList.add('hidden');
-            errorArea.classList.add('hidden');
-        }
-
-        // 格式化文件大小
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        // 处理文件按钮点击
-        processBtn.addEventListener('click', processFile);
-
-        // 处理文件
-        function processFile() {
-            if (!selectedFile) {
-                showError('请先选择一个文件');
-                return;
-            }
-
-            // 获取参数
-            const headerLength = parseInt(headerLengthInput.value, 10);
-            const damageInterval = parseInt(damageIntervalInput.value, 10);
-
-            // 验证参数
-            if (isNaN(headerLength) || headerLength < 0) {
-                showError('文件头长度必须是大于等于0的数字');
-                return;
-            }
-
-            if (isNaN(damageInterval) || damageInterval < 2) {
-                showError('损坏间隔必须是大于等于2的数字');
-                return;
-            }
-
-            // 重置状态
-            resultArea.classList.add('hidden');
-            errorArea.classList.add('hidden');
-            progressArea.classList.remove('hidden');
-            progressBar.style.width = '0%';
-            progressText.textContent = '正在读取文件...';
-
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                try {
-                    const arrayBuffer = e.target.result;
-                    const byteArray = new Uint8Array(arrayBuffer);
-                    const fileSize = byteArray.length;
-
-                    // 更新进度
-                    updateProgress(20, '正在处理文件...');
-
-                    // 确保文件头长度不超过文件大小
-                    const actualHeaderLength = Math.min(headerLength, fileSize);
-                    
-                    // 计算需要损坏的位置数量
-                    const dataSize = fileSize - actualHeaderLength;
-                    if (dataSize <= 0) {
-                        showError('文件头长度大于或等于文件大小，没有可损坏的数据');
-                        return;
-                    }
-
-                    // 损坏数据：从文件头之后开始，每隔damageInterval字节，损坏2字节
-                    let modifiedCount = 0;
-                    const totalSteps = Math.ceil(dataSize / damageInterval);
-                    let currentStep = 0;
-                    
-                    // 使用requestAnimationFrame优化大文件进度显示
-                    function processNextChunk() {
-                        // 计算当前批次处理的位置
-                        const i = actualHeaderLength + currentStep * damageInterval;
-                        
-                        if (i >= fileSize) {
-                            // 处理完成
-                            updateProgress(100, '处理完成！');
-                            
-                            // 创建处理后的文件
-                            processedBlob = new Blob([byteArray], { type: selectedFile.type });
-                            const nameParts = selectedFile.name.split('.');
-                            if (nameParts.length > 1) {
-                                const ext = nameParts.pop();
-                                processedFileName = `${nameParts.join('.')}_damaged.${ext}`;
-                            } else {
-                                processedFileName = `${selectedFile.name}_damaged`;
-                            }
-
-                            // 显示结果
-                            resultInfo.textContent = `已在文件中损坏 ${modifiedCount/2} 处，共 ${modifiedCount} 字节`;
-                            setTimeout(() => {
-                                progressArea.classList.add('hidden');
-                                resultArea.classList.remove('hidden');
-                            }, 500);
-                            return;
-                        }
-                        
-                        // 损坏接下来的2字节，确保不超出文件范围
-                        for (let j = 0; j < 2 && i + j < fileSize; j++) {
-                            // 生成随机字节值 (0-255)
-                            byteArray[i + j] = Math.floor(Math.random() * 256);
-                            modifiedCount++;
-                        }
-                        
-                        // 更新进度
-                        currentStep++;
-                        const progress = 20 + Math.floor((currentStep / totalSteps) * 70);
-                        updateProgress(progress, `正在损坏数据... (${Math.floor(currentStep/totalSteps*100)}%)`);
-                        
-                        // 继续处理下一批
-                        requestAnimationFrame(processNextChunk);
-                    }
-                    
-                    // 开始分块处理
-                    processNextChunk();
-
-                } catch (error) {
-                    console.error('处理错误:', error);
-                    showError(`处理文件时出错: ${error.message}`);
-                }
-            };
-
-            reader.onerror = function() {
-                console.error('读取错误:', reader.error);
-                showError('读取文件时出错: ' + reader.error.message);
-            };
-
-            // 读取文件为ArrayBuffer
-            reader.readAsArrayBuffer(selectedFile);
-        }
-
-        // 更新进度
-        function updateProgress(percent, text) {
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = text;
-        }
-
-        // 显示错误
-        function showError(message) {
-            progressArea.classList.add('hidden');
-            errorMessage.textContent = message;
-            errorArea.classList.remove('hidden');
-        }
-
-        // 下载处理后的文件
-        downloadBtn.addEventListener('click', function() {
-            if (processedBlob && processedFileName) {
-                try {
-                    const url = URL.createObjectURL(processedBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = processedFileName;
-                    document.body.appendChild(a);
-                    // 模拟点击下载
-                    const clickEvent = new MouseEvent('click', {
-                        view: window,
-                        bubbles: true,
-                        cancelable: true
-                    });
-                    a.dispatchEvent(clickEvent);
-                    
-                    // 清理
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }, 100);
-                } catch (error) {
-                    console.error('下载错误:', error);
-                    showError('下载文件时出错: ' + error.message);
-                }
-            }
-        });
+    }
     </script>
 </body>
 </html>
